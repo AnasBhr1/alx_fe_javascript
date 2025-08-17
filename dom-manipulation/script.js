@@ -1,4 +1,479 @@
-// Quote data structure - using array to store quote objects
+currentFilter = 'all';
+    }
+}
+
+// ===== SERVER SYNCHRONIZATION SYSTEM =====
+
+// Initialize server data (simulation)
+function initializeServerData() {
+    // Simulate server having some additional quotes
+    serverQuotes = [
+        ...defaultQuotes,
+        { text: "The way to get started is to quit talking and begin doing.", category: "Action" },
+        { text: "Innovation distinguishes between a leader and a follower.", category: "Leadership" },
+        { text: "Your limitation—it's only your imagination.", category: "Motivation" },
+        { text: "Push yourself, because no one else is going to do it for you.", category: "Self-Improvement" },
+        { text: "Great things never come from comfort zones.", category: "Growth" }
+    ];
+}
+
+// Load sync settings from storage
+function loadSyncSettings() {
+    try {
+        const settings = localStorage.getItem(STORAGE_KEYS.SYNC_SETTINGS);
+        if (settings) {
+            const parsed = JSON.parse(settings);
+            autoSyncEnabled = parsed.autoSync || false;
+            syncInterval = parsed.interval || 60000;
+            syncIntervalSelect.value = syncInterval;
+        }
+        
+        const lastSync = localStorage.getItem(STORAGE_KEYS.LAST_SYNC);
+        if (lastSync) {
+            lastSyncTime = new Date(lastSync);
+        }
+    } catch (error) {
+        console.error('Error loading sync settings:', error);
+    }
+}
+
+// Save sync settings to storage
+function saveSyncSettings() {
+    try {
+        const settings = {
+            autoSync: autoSyncEnabled,
+            interval: syncInterval
+        };
+        localStorage.setItem(STORAGE_KEYS.SYNC_SETTINGS, JSON.stringify(settings));
+        
+        if (lastSyncTime) {
+            localStorage.setItem(STORAGE_KEYS.LAST_SYNC, lastSyncTime.toISOString());
+        }
+    } catch (error) {
+        console.error('Error saving sync settings:', error);
+    }
+}
+
+// Update sync status display
+function updateSyncStatus() {
+    autoSyncStatusElement.textContent = autoSyncEnabled ? 'ON' : 'OFF';
+    
+    if (lastSyncTime) {
+        const timeAgo = getTimeAgo(lastSyncTime);
+        lastSyncTimeElement.textContent = `Last sync: ${timeAgo}`;
+    }
+    
+    // Update sync status indicator
+    if (isSyncing) {
+        syncStatus.className = 'stat-number sync-status syncing';
+        syncStatus.textContent = '●';
+    } else if (conflictData) {
+        syncStatus.className = 'stat-number sync-status conflict';
+        syncStatus.textContent = '⚠';
+    } else {
+        syncStatus.className = 'stat-number sync-status online';
+        syncStatus.textContent = '●';
+    }
+}
+
+// Get time ago string
+function getTimeAgo(date) {
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+}
+
+// Simulate server API call
+async function simulateServerCall(endpoint, method = 'GET', data = null) {
+    return new Promise((resolve, reject) => {
+        // Simulate network delay
+        setTimeout(() => {
+            try {
+                switch (endpoint) {
+                    case 'quotes':
+                        if (method === 'GET') {
+                            // Occasionally introduce "server changes" for conflict simulation
+                            if (Math.random() < 0.3) {
+                                const newServerQuote = {
+                                    text: `Server quote ${Date.now()}`,
+                                    category: "Server"
+                                };
+                                if (!serverQuotes.some(q => q.text === newServerQuote.text)) {
+                                    serverQuotes.push(newServerQuote);
+                                }
+                            }
+                            resolve({ data: [...serverQuotes], lastModified: new Date().toISOString() });
+                        } else if (method === 'POST') {
+                            serverQuotes = [...data];
+                            resolve({ success: true, data: serverQuotes });
+                        }
+                        break;
+                    default:
+                        reject(new Error('Unknown endpoint'));
+                }
+            } catch (error) {
+                // Simulate occasional network errors
+                if (Math.random() < 0.1) {
+                    reject(new Error('Network error'));
+                } else {
+                    reject(error);
+                }
+            }
+        }, 1000 + Math.random() * 2000); // 1-3 second delay
+    });
+}
+
+// Perform manual sync
+async function performManualSync() {
+    if (isSyncing) return;
+    
+    isSyncing = true;
+    manualSyncBtn.disabled = true;
+    manualSyncBtn.textContent = '🔄 Syncing...';
+    updateSyncStatus();
+    
+    try {
+        await syncWithServer();
+        showSyncNotification('Manual sync completed successfully!', 'success');
+    } catch (error) {
+        console.error('Manual sync failed:', error);
+        showSyncNotification(`Sync failed: ${error.message}`, 'error');
+    } finally {
+        isSyncing = false;
+        manualSyncBtn.disabled = false;
+        manualSyncBtn.textContent = '🔄 Sync Now';
+        updateSyncStatus();
+    }
+}
+
+// Main sync function
+async function syncWithServer() {
+    try {
+        // Fetch server data
+        const serverResponse = await simulateServerCall('quotes');
+        const serverData = serverResponse.data;
+        
+        // Check for conflicts
+        const hasConflicts = await detectConflicts(serverData);
+        
+        if (hasConflicts) {
+            // Store conflict data and show resolution UI
+            conflictData = {
+                serverData: serverData,
+                localData: [...quotes],
+                timestamp: new Date().toISOString()
+            };
+            showConflictModal();
+            updateSyncStatus();
+            return;
+        }
+        
+        // No conflicts - perform simple merge
+        await mergeServerData(serverData);
+        
+        lastSyncTime = new Date();
+        saveSyncSettings();
+        updateSyncStatus();
+        
+    } catch (error) {
+        throw new Error(`Sync failed: ${error.message}`);
+    }
+}
+
+// Detect conflicts between local and server data
+async function detectConflicts(serverData) {
+    // Simple conflict detection: check if server has different quotes
+    const localTexts = new Set(quotes.map(q => q.text.toLowerCase().trim()));
+    const serverTexts = new Set(serverData.map(q => q.text.toLowerCase().trim()));
+    
+    // Check if server has quotes we don't have or if counts differ significantly
+    const serverOnlyQuotes = serverData.filter(sq => 
+        !localTexts.has(sq.text.toLowerCase().trim())
+    );
+    
+    const localOnlyQuotes = quotes.filter(lq => 
+        !serverTexts.has(lq.text.toLowerCase().trim())
+    );
+    
+    // Conflict exists if both sides have unique data
+    return serverOnlyQuotes.length > 0 && localOnlyQuotes.length > 0;
+}
+
+// Merge server data with local data
+async function mergeServerData(serverData) {
+    const localTexts = new Set(quotes.map(q => q.text.toLowerCase().trim()));
+    const newQuotes = serverData.filter(sq => 
+        !localTexts.has(sq.text.toLowerCase().trim())
+    );
+    
+    if (newQuotes.length > 0) {
+        quotes.push(...newQuotes);
+        saveQuotes();
+        populateCategories();
+        applyCurrentFilter();
+        updateStats();
+        updateCategoryFilter();
+        updateStorageStatus();
+        
+        showSyncNotification(`Added ${newQuotes.length} new quotes from server!`, 'success');
+    }
+    
+    // Update server with our local data
+    try {
+        await simulateServerCall('quotes', 'POST', quotes);
+    } catch (error) {
+        console.warn('Failed to update server with local data:', error);
+    }
+}
+
+// Show conflict resolution modal
+function showConflictModal() {
+    const modal = document.getElementById('conflictModal');
+    const comparison = document.getElementById('conflictComparison');
+    
+    if (conflictData) {
+        const serverCount = conflictData.serverData.length;
+        const localCount = conflictData.localData.length;
+        const serverOnlyCount = conflictData.serverData.filter(sq => 
+            !conflictData.localData.some(lq => lq.text.toLowerCase().trim() === sq.text.toLowerCase().trim())
+        ).length;
+        const localOnlyCount = conflictData.localData.filter(lq => 
+            !conflictData.serverData.some(sq => sq.text.toLowerCase().trim() === lq.text.toLowerCase().trim())
+        ).length;
+        
+        comparison.innerHTML = `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
+                <div style="padding: 15px; border: 2px solid #28a745; border-radius: 10px;">
+                    <h4 style="color: #28a745; margin: 0 0 10px 0;">🖥️ Server Data</h4>
+                    <p>Total quotes: <strong>${serverCount}</strong></p>
+                    <p>Server-only quotes: <strong>${serverOnlyCount}</strong></p>
+                </div>
+                <div style="padding: 15px; border: 2px solid #007bff; border-radius: 10px;">
+                    <h4 style="color: #007bff; margin: 0 0 10px 0;">💻 Local Data</h4>
+                    <p>Total quotes: <strong>${localCount}</strong></p>
+                    <p>Local-only quotes: <strong>${localOnlyCount}</strong></p>
+                </div>
+            </div>
+            <p><strong>Recommendation:</strong> Choose "Merge Both" to keep all quotes from both sources.</p>
+        `;
+    }
+    
+    modal.style.display = 'flex';
+}
+
+// Close conflict modal
+function closeConflictModal() {
+    const modal = document.getElementById('conflictModal');
+    modal.style.display = 'none';
+}
+
+// Resolve conflict based on user choice
+async function resolveConflict(strategy) {
+    if (!conflictData) return;
+    
+    try {
+        switch (strategy) {
+            case 'local':
+                // Keep local data, upload to server
+                await simulateServerCall('quotes', 'POST', quotes);
+                showSyncNotification('Kept local changes and updated server!', 'success');
+                break;
+                
+            case 'server':
+                // Use server data, replace local
+                quotes = [...conflictData.serverData];
+                saveQuotes();
+                populateCategories();
+                applyCurrentFilter();
+                updateStats();
+                updateCategoryFilter();
+                updateStorageStatus();
+                showSyncNotification('Replaced local data with server data!', 'warning');
+                break;
+                
+            case 'merge':
+                // Merge both datasets
+                const serverTexts = new Set(conflictData.serverData.map(q => q.text.toLowerCase().trim()));
+                const localTexts = new Set(quotes.map(q => q.text.toLowerCase().trim()));
+                
+                // Add server quotes that we don't have
+                const newServerQuotes = conflictData.serverData.filter(sq => 
+                    !localTexts.has(sq.text.toLowerCase().trim())
+                );
+                
+                // Add local quotes that server doesn't have
+                const newLocalQuotes = quotes.filter(lq => 
+                    !serverTexts.has(lq.text.toLowerCase().trim())
+                );
+                
+                // Combine all quotes
+                quotes = [...conflictData.serverData, ...newLocalQuotes];
+                
+                // Remove duplicates (extra safety)
+                const uniqueQuotes = [];
+                const seenTexts = new Set();
+                
+                quotes.forEach(quote => {
+                    const normalizedText = quote.text.toLowerCase().trim();
+                    if (!seenTexts.has(normalizedText)) {
+                        seenTexts.add(normalizedText);
+                        uniqueQuotes.push(quote);
+                    }
+                });
+                
+                quotes = uniqueQuotes;
+                
+                saveQuotes();
+                await simulateServerCall('quotes', 'POST', quotes);
+                populateCategories();
+                applyCurrentFilter();
+                updateStats();
+                updateCategoryFilter();
+                updateStorageStatus();
+                
+                showSyncNotification(`Successfully merged data! Total: ${quotes.length} quotes`, 'success');
+                break;
+        }
+        
+        lastSyncTime = new Date();
+        conflictData = null;
+        saveSyncSettings();
+        updateSyncStatus();
+        closeConflictModal();
+        
+    } catch (error) {
+        console.error('Error resolving conflict:', error);
+        showSyncNotification(`Error resolving conflict: ${error.message}`, 'error');
+    }
+}
+
+// Toggle auto sync
+function toggleAutoSync() {
+    autoSyncEnabled = !autoSyncEnabled;
+    saveSyncSettings();
+    updateSyncStatus();
+    
+    if (autoSyncEnabled) {
+        startAutoSync();
+        showSyncNotification('Auto sync enabled!', 'success');
+    } else {
+        stopAutoSync();
+        showSyncNotification('Auto sync disabled!', 'warning');
+    }
+}
+
+// Start auto sync
+function startAutoSync() {
+    if (syncTimer) {
+        clearInterval(syncTimer);
+    }
+    
+    syncTimer = setInterval(async () => {
+        if (!isSyncing) {
+            try {
+                await syncWithServer();
+                console.log('Auto sync completed');
+            } catch (error) {
+                console.error('Auto sync failed:', error);
+                // Don't show notifications for auto sync failures to avoid spam
+            }
+        }
+    }, syncInterval);
+}
+
+// Stop auto sync
+function stopAutoSync() {
+    if (syncTimer) {
+        clearInterval(syncTimer);
+        syncTimer = null;
+    }
+}
+
+// Update sync interval
+function updateSyncInterval() {
+    syncInterval = parseInt(syncIntervalSelect.value);
+    saveSyncSettings();
+    
+    if (autoSyncEnabled) {
+        startAutoSync(); // Restart with new interval
+    }
+    
+    showSyncNotification(`Sync interval updated to ${syncInterval / 1000} seconds`, 'success');
+}
+
+// Force server data (replace local with server)
+async function forceServerData() {
+    if (isSyncing) return;
+    
+    const confirmed = confirm('This will replace ALL local quotes with server data. This cannot be undone. Continue?');
+    if (!confirmed) return;
+    
+    isSyncing = true;
+    forceServerBtn.disabled = true;
+    forceServerBtn.textContent = '⬇️ Downloading...';
+    updateSyncStatus();
+    
+    try {
+        const serverResponse = await simulateServerCall('quotes');
+        quotes = [...serverResponse.data];
+        
+        saveQuotes();
+        populateCategories();
+        applyCurrentFilter();
+        updateStats();
+        updateCategoryFilter();
+        updateStorageStatus();
+        
+        lastSyncTime = new Date();
+        saveSyncSettings();
+        
+        showSyncNotification('Local data replaced with server data!', 'warning');
+        
+    } catch (error) {
+        console.error('Force sync failed:', error);
+        showSyncNotification(`Force sync failed: ${error.message}`, 'error');
+    } finally {
+        isSyncing = false;
+        forceServerBtn.disabled = false;
+        forceServerBtn.textContent = '⬇️ Force Server Data';
+        updateSyncStatus();
+    }
+}
+
+// Show sync notification
+function showSyncNotification(message, type = 'success') {
+    // Remove existing sync notifications
+    const existingNotifications = document.querySelectorAll('.sync-notification');
+    existingNotifications.forEach(notification => notification.remove());
+    
+    const notification = document.createElement('div');
+    notification.className = `sync-notification ${type}`;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 100);
+    
+    // Animate out and remove
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 300);
+    }, 4000);
+}// Quote data structure - using array to store quote objects
 let quotes = [];
 
 // Default quotes to initialize the application
@@ -19,12 +494,23 @@ const STORAGE_KEYS = {
     LAST_QUOTE: 'dynamicQuoteGenerator_lastQuote',
     USER_PREFERENCES: 'dynamicQuoteGenerator_preferences',
     SESSION_DATA: 'dynamicQuoteGenerator_sessionData',
-    LAST_FILTER: 'dynamicQuoteGenerator_lastFilter'
+    LAST_FILTER: 'dynamicQuoteGenerator_lastFilter',
+    LAST_SYNC: 'dynamicQuoteGenerator_lastSync',
+    SYNC_SETTINGS: 'dynamicQuoteGenerator_syncSettings'
 };
 
 // Current filter state
 let currentFilter = 'all';
 let filteredQuotes = [];
+
+// Server sync state
+let autoSyncEnabled = false;
+let syncInterval = 60000; // Default 1 minute
+let syncTimer = null;
+let lastSyncTime = null;
+let isSyncing = false;
+let serverQuotes = []; // Simulated server data
+let conflictData = null;
 
 // DOM element references
 const quoteDisplay = document.getElementById('quoteDisplay');
@@ -36,6 +522,15 @@ const clearAllBtn = document.getElementById('clearAllQuotes');
 const exportBtn = document.getElementById('exportQuotes');
 const categoryFilter = document.getElementById('categoryFilter');
 const categoryButtons = document.getElementById('categoryButtons');
+
+// Sync-related DOM elements
+const manualSyncBtn = document.getElementById('manualSync');
+const toggleAutoSyncBtn = document.getElementById('toggleAutoSync');
+const forceServerBtn = document.getElementById('forceServerData');
+const syncIntervalSelect = document.getElementById('syncInterval');
+const syncStatus = document.getElementById('syncStatus');
+const lastSyncTimeElement = document.getElementById('lastSyncTime');
+const autoSyncStatusElement = document.getElementById('autoSyncStatus');
 
 // Track current quote index to avoid immediate repeats
 let lastQuoteIndex = -1;
@@ -55,6 +550,10 @@ function initializeApp() {
     loadQuotesFromStorage();
     loadSessionData();
     loadLastFilter();
+    loadSyncSettings();
+    
+    // Initialize server data simulation
+    initializeServerData();
     
     // Initialize filtering system
     populateCategories();
@@ -63,6 +562,7 @@ function initializeApp() {
     updateStats();
     updateCategoryFilter();
     updateStorageStatus();
+    updateSyncStatus();
     
     // Event listeners
     newQuoteBtn.addEventListener('click', showRandomQuote);
@@ -70,6 +570,12 @@ function initializeApp() {
     categorySelect.addEventListener('change', handleCategoryChange);
     clearAllBtn.addEventListener('click', clearAllQuotes);
     exportBtn.addEventListener('click', exportQuotesToJson);
+    
+    // Sync event listeners
+    manualSyncBtn.addEventListener('click', performManualSync);
+    toggleAutoSyncBtn.addEventListener('click', toggleAutoSync);
+    forceServerBtn.addEventListener('click', forceServerData);
+    syncIntervalSelect.addEventListener('change', updateSyncInterval);
     
     // Form input event listeners for validation
     document.getElementById('newQuoteText').addEventListener('input', validateForm);
@@ -81,6 +587,11 @@ function initializeApp() {
     
     // Track user interactions
     document.addEventListener('click', trackUserInteraction);
+    
+    // Start auto sync if enabled
+    if (autoSyncEnabled) {
+        startAutoSync();
+    }
 }
 
 // Advanced DOM manipulation: Show random quote with animations
@@ -392,7 +903,12 @@ document.addEventListener('DOMContentLoaded', initializeApp);
 // Save quotes to local storage
 function saveQuotes() {
     try {
-        localStorage.setItem(STORAGE_KEYS.QUOTES, JSON.stringify(quotes));
+        const quotesWithTimestamp = {
+            quotes: quotes,
+            lastModified: new Date().toISOString(),
+            version: Date.now()
+        };
+        localStorage.setItem(STORAGE_KEYS.QUOTES, JSON.stringify(quotesWithTimestamp));
         console.log('Quotes saved to local storage:', quotes.length, 'quotes');
     } catch (error) {
         console.error('Error saving quotes to local storage:', error);
@@ -403,9 +919,16 @@ function saveQuotes() {
 // Load quotes from local storage
 function loadQuotesFromStorage() {
     try {
-        const storedQuotes = localStorage.getItem(STORAGE_KEYS.QUOTES);
-        if (storedQuotes) {
-            quotes = JSON.parse(storedQuotes);
+        const storedData = localStorage.getItem(STORAGE_KEYS.QUOTES);
+        if (storedData) {
+            const parsedData = JSON.parse(storedData);
+            if (Array.isArray(parsedData)) {
+                // Legacy format - just quotes array
+                quotes = parsedData;
+            } else if (parsedData.quotes) {
+                // New format with metadata
+                quotes = parsedData.quotes;
+            }
             console.log('Quotes loaded from local storage:', quotes.length, 'quotes');
         } else {
             // Initialize with default quotes if no stored data

@@ -441,6 +441,234 @@
             color: #721c24;
         }
 
+        .sync-section {
+            background: #e8f5e8;
+            border: 2px solid #28a745;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 30px 0;
+        }
+
+        .sync-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .sync-header h3 {
+            margin: 0;
+            color: #155724;
+            font-size: 1.3em;
+        }
+
+        .sync-info {
+            background: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            color: #666;
+            border: 1px solid #28a745;
+        }
+
+        .sync-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .sync-btn {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .sync-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(40, 167, 69, 0.4);
+        }
+
+        .sync-btn.danger {
+            background: linear-gradient(45deg, #dc3545, #c82333);
+        }
+
+        .sync-btn.danger:hover {
+            box-shadow: 0 8px 25px rgba(220, 53, 69, 0.4);
+        }
+
+        .sync-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .sync-settings {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .sync-settings label {
+            font-weight: 600;
+            color: #155724;
+            margin-bottom: 0;
+        }
+
+        #syncInterval {
+            padding: 8px 12px;
+            border: 2px solid #28a745;
+            border-radius: 20px;
+            font-size: 0.9em;
+            outline: none;
+            background: white;
+        }
+
+        .sync-status {
+            font-size: 1.5em !important;
+            transition: color 0.3s ease;
+        }
+
+        .sync-status.online {
+            color: #28a745;
+        }
+
+        .sync-status.syncing {
+            color: #ffc107;
+            animation: pulse 1s infinite;
+        }
+
+        .sync-status.offline {
+            color: #dc3545;
+        }
+
+        .sync-status.conflict {
+            color: #fd7e14;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .conflict-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+
+        .conflict-content {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            margin: 20px;
+        }
+
+        .conflict-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .conflict-header h3 {
+            margin: 0;
+            color: #fd7e14;
+        }
+
+        .close-conflict {
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .conflict-options {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 25px;
+            flex-wrap: wrap;
+        }
+
+        .conflict-btn {
+            background: #fd7e14;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .conflict-btn:hover {
+            background: #e8690b;
+            transform: translateY(-2px);
+        }
+
+        .conflict-btn.secondary {
+            background: #6c757d;
+        }
+
+        .conflict-btn.secondary:hover {
+            background: #5a6268;
+        }
+
+        .sync-notification {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            z-index: 1500;
+            transform: translateX(100%);
+            transition: all 0.3s ease;
+            max-width: 350px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .sync-notification.show {
+            transform: translateX(0);
+        }
+
+        .sync-notification.error {
+            background: #dc3545;
+        }
+
+        .sync-notification.warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
         @media (max-width: 600px) {
             .container {
                 padding: 20px;
@@ -471,7 +699,7 @@
     <div class="container">
         <h1>Dynamic Quote Generator</h1>
         
-        <!-- Statistics Section -->
+        <!-- Enhanced Statistics Section with Sync Status -->
         <div class="stats" id="statsSection">
             <div class="stat-item">
                 <div class="stat-number" id="totalQuotes">0</div>
@@ -480,6 +708,36 @@
             <div class="stat-item">
                 <div class="stat-number" id="totalCategories">0</div>
                 <div class="stat-label">Categories</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number sync-status" id="syncStatus">●</div>
+                <div class="stat-label">Sync Status</div>
+            </div>
+        </div>
+
+        <!-- Server Sync Controls -->
+        <div class="sync-section">
+            <div class="sync-header">
+                <h3>🔄 Server Synchronization</h3>
+                <div class="sync-info">
+                    <span id="lastSyncTime">Never synced</span>
+                </div>
+            </div>
+            
+            <div class="sync-controls">
+                <button id="manualSync" class="sync-btn">🔄 Sync Now</button>
+                <button id="toggleAutoSync" class="sync-btn">⏱️ Auto Sync: <span id="autoSyncStatus">OFF</span></button>
+                <button id="forceServerData" class="sync-btn danger">⬇️ Force Server Data</button>
+            </div>
+            
+            <div class="sync-settings">
+                <label for="syncInterval">Sync Interval:</label>
+                <select id="syncInterval">
+                    <option value="30000">30 seconds</option>
+                    <option value="60000" selected>1 minute</option>
+                    <option value="300000">5 minutes</option>
+                    <option value="600000">10 minutes</option>
+                </select>
             </div>
         </div>
 
@@ -557,6 +815,26 @@
                     <input id="newQuoteCategory" type="text" placeholder="e.g., Motivation, Life, Success..." maxlength="50" />
                 </div>
                 <button onclick="addQuote()" style="margin-left: 10px;">Add Quote</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conflict Resolution Modal -->
+    <div id="conflictModal" class="conflict-modal">
+        <div class="conflict-content">
+            <div class="conflict-header">
+                <h3>⚠️ Data Conflict Detected</h3>
+                <button class="close-conflict" onclick="closeConflictModal()">✕</button>
+            </div>
+            <div id="conflictDetails">
+                <p>There are differences between your local data and the server data. How would you like to resolve this?</p>
+                <div id="conflictComparison"></div>
+            </div>
+            <div class="conflict-options">
+                <button class="conflict-btn" onclick="resolveConflict('local')">Keep Local Changes</button>
+                <button class="conflict-btn" onclick="resolveConflict('server')">Use Server Data</button>
+                <button class="conflict-btn" onclick="resolveConflict('merge')">Merge Both</button>
+                <button class="conflict-btn secondary" onclick="closeConflictModal()">Cancel</button>
             </div>
         </div>
     </div>
