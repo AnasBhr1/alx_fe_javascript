@@ -32,7 +32,13 @@ async function fetchFromJsonPlaceholder(endpoint) {
     try {
         console.log(`Fetching data from JSONPlaceholder: ${endpoint}`);
         
-        const response = await fetch(`${MOCK_API.BASE_URL}${endpoint}`);
+        const response = await fetch(`${MOCK_API.BASE_URL}${endpoint}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        });
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -46,6 +52,66 @@ async function fetchFromJsonPlaceholder(endpoint) {
     } catch (error) {
         console.error('Error fetching from JSONPlaceholder:', error);
         throw new Error(`JSONPlaceholder API error: ${error.message}`);
+    }
+}
+
+// Post data to JSONPlaceholder API
+async function postToJsonPlaceholder(endpoint, data) {
+    try {
+        console.log(`Posting data to JSONPlaceholder: ${endpoint}`, data);
+        
+        const response = await fetch(`${MOCK_API.BASE_URL}${endpoint}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Authorization': 'Bearer fake-token-for-demo'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+        }
+        
+        const responseData = await response.json();
+        console.log('Successfully posted data to JSONPlaceholder:', responseData);
+        
+        return responseData;
+        
+    } catch (error) {
+        console.error('Error posting to JSONPlaceholder:', error);
+        throw new Error(`JSONPlaceholder POST error: ${error.message}`);
+    }
+}
+
+// Update data on JSONPlaceholder API
+async function updateOnJsonPlaceholder(endpoint, data) {
+    try {
+        console.log(`Updating data on JSONPlaceholder: ${endpoint}`, data);
+        
+        const response = await fetch(`${MOCK_API.BASE_URL}${endpoint}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Authorization': 'Bearer fake-token-for-demo'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+        }
+        
+        const responseData = await response.json();
+        console.log('Successfully updated data on JSONPlaceholder:', responseData);
+        
+        return responseData;
+        
+    } catch (error) {
+        console.error('Error updating on JSONPlaceholder:', error);
+        throw new Error(`JSONPlaceholder PUT error: ${error.message}`);
     }
 }
 
@@ -146,8 +212,77 @@ async function simulateServerCall(endpoint, method = 'GET', data = null) {
                             });
                         }
                     } else if (method === 'POST') {
-                        serverQuotes = [...data];
-                        resolve({ success: true, data: serverQuotes });
+                        // Post data to server (including JSONPlaceholder API)
+                        try {
+                            // Transform quotes to post format for JSONPlaceholder
+                            const postsToCreate = data.slice(0, 3).map((quote, index) => ({
+                                title: quote.text.substring(0, 60) + (quote.text.length > 60 ? '...' : ''),
+                                body: `Quote from category: ${quote.category}. Original text: ${quote.text}`,
+                                userId: 1 + (index % 10)
+                            }));
+                            
+                            // Post to JSONPlaceholder API
+                            const postPromises = postsToCreate.map(post => 
+                                postToJsonPlaceholder(MOCK_API.ENDPOINTS.POSTS, post)
+                            );
+                            
+                            const apiResults = await Promise.all(postPromises);
+                            console.log(`Successfully posted ${apiResults.length} items to JSONPlaceholder`);
+                            
+                            // Update local server data
+                            serverQuotes = [...data];
+                            
+                            resolve({ 
+                                success: true, 
+                                data: serverQuotes,
+                                apiResults: apiResults,
+                                message: `Posted ${apiResults.length} quotes to JSONPlaceholder API`
+                            });
+                            
+                        } catch (apiError) {
+                            console.warn('Failed to post to JSONPlaceholder, using local storage:', apiError);
+                            // Fallback to local storage only
+                            serverQuotes = [...data];
+                            resolve({ 
+                                success: true, 
+                                data: serverQuotes,
+                                apiResults: null,
+                                message: 'Saved to local server (API unavailable)'
+                            });
+                        }
+                    } else if (method === 'PUT') {
+                        // Update data on server
+                        try {
+                            // Simulate updating a post on JSONPlaceholder
+                            if (data && data.length > 0) {
+                                const sampleQuote = data[0];
+                                const updateData = {
+                                    id: 1,
+                                    title: sampleQuote.text.substring(0, 60),
+                                    body: `Updated quote: ${sampleQuote.text}`,
+                                    userId: 1
+                                };
+                                
+                                const updateResult = await updateOnJsonPlaceholder('/posts/1', updateData);
+                                console.log('Successfully updated post on JSONPlaceholder:', updateResult);
+                            }
+                            
+                            serverQuotes = [...data];
+                            resolve({ 
+                                success: true, 
+                                data: serverQuotes,
+                                message: 'Data updated on server and JSONPlaceholder'
+                            });
+                            
+                        } catch (apiError) {
+                            console.warn('Failed to update on JSONPlaceholder:', apiError);
+                            serverQuotes = [...data];
+                            resolve({ 
+                                success: true, 
+                                data: serverQuotes,
+                                message: 'Data updated on local server only'
+                            });
+                        }
                     }
                     break;
                     
@@ -510,11 +645,24 @@ async function mergeServerData(serverData) {
         showSyncNotification(`Added ${newQuotes.length} new quotes from server!`, 'success');
     }
     
-    // Update server with our local data
+    // Update server with our local data using POST
     try {
-        await simulateServerCall('quotes', 'POST', quotes);
+        const postResponse = await simulateServerCall('quotes', 'POST', quotes);
+        
+        if (postResponse.apiResults) {
+            showSyncNotification(
+                `✅ ${postResponse.message} - Posted ${postResponse.apiResults.length} quotes to JSONPlaceholder!`,
+                'success'
+            );
+        } else {
+            showSyncNotification(`✅ ${postResponse.message}`, 'success');
+        }
+        
+        console.log('Successfully synchronized local data with server');
+        
     } catch (error) {
         console.warn('Failed to update server with local data:', error);
+        showSyncNotification(`⚠️ Local data updated but server sync failed: ${error.message}`, 'warning');
     }
 }
 
@@ -567,8 +715,16 @@ async function resolveConflict(strategy) {
         switch (strategy) {
             case 'local':
                 // Keep local data, upload to server
-                await simulateServerCall('quotes', 'POST', quotes);
-                showSyncNotification('Kept local changes and updated server!', 'success');
+                const uploadResponse = await simulateServerCall('quotes', 'POST', quotes);
+                
+                if (uploadResponse.apiResults) {
+                    showSyncNotification(
+                        `✅ Kept local changes and posted ${uploadResponse.apiResults.length} quotes to JSONPlaceholder!`,
+                        'success'
+                    );
+                } else {
+                    showSyncNotification('✅ Kept local changes and updated server!', 'success');
+                }
                 break;
                 
             case 'server':
@@ -616,14 +772,16 @@ async function resolveConflict(strategy) {
                 quotes = uniqueQuotes;
                 
                 saveQuotes();
-                await simulateServerCall('quotes', 'POST', quotes);
+                
+                // Sync merged data with server using PUT method
+                const syncResponse = await simulateServerCall('quotes', 'PUT', quotes);
+                showSyncNotification(`✅ ${syncResponse.message} - Total: ${quotes.length} quotes`, 'success');
+                
                 populateCategories();
                 applyCurrentFilter();
                 updateStats();
                 updateCategoryFilter();
                 updateStorageStatus();
-                
-                showSyncNotification(`Successfully merged data! Total: ${quotes.length} quotes`, 'success');
                 break;
         }
         
@@ -773,32 +931,104 @@ async function testJsonPlaceholderAPI() {
         console.log('Testing JSONPlaceholder API integration...');
         showSyncNotification('Testing JSONPlaceholder API connection...', 'info');
         
-        // Fetch posts from JSONPlaceholder
-        const posts = await fetch('https://jsonplaceholder.typicode.com/posts');
+        // Test 1: GET request
+        console.log('🔍 Testing GET request...');
+        const posts = await fetch('https://jsonplaceholder.typicode.com/posts', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        });
         
         if (!posts.ok) {
-            throw new Error(`HTTP ${posts.status}: ${posts.statusText}`);
+            throw new Error(`GET failed: HTTP ${posts.status}: ${posts.statusText}`);
         }
         
         const postsData = await posts.json();
-        console.log(`✅ Successfully fetched ${postsData.length} posts from JSONPlaceholder`);
+        console.log(`✅ GET Success: Fetched ${postsData.length} posts from JSONPlaceholder`);
+        
+        // Test 2: POST request
+        console.log('📤 Testing POST request...');
+        const testPostData = {
+            title: 'Test Quote from Dynamic Quote Generator',
+            body: 'This is a test post created by the Dynamic Quote Generator to demonstrate POST functionality with proper headers.',
+            userId: 1
+        };
+        
+        const postResponse = await fetch('https://jsonplaceholder.typicode.com/posts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Authorization': 'Bearer test-token'
+            },
+            body: JSON.stringify(testPostData)
+        });
+        
+        if (!postResponse.ok) {
+            throw new Error(`POST failed: HTTP ${postResponse.status}: ${postResponse.statusText}`);
+        }
+        
+        const postResult = await postResponse.json();
+        console.log('✅ POST Success:', postResult);
+        
+        // Test 3: PUT request
+        console.log('📝 Testing PUT request...');
+        const testPutData = {
+            id: 1,
+            title: 'Updated Quote from Dynamic Quote Generator',
+            body: 'This demonstrates PUT functionality with proper Content-Type headers.',
+            userId: 1
+        };
+        
+        const putResponse = await fetch('https://jsonplaceholder.typicode.com/posts/1', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(testPutData)
+        });
+        
+        if (!putResponse.ok) {
+            throw new Error(`PUT failed: HTTP ${putResponse.status}: ${putResponse.statusText}`);
+        }
+        
+        const putResult = await putResponse.json();
+        console.log('✅ PUT Success:', putResult);
         
         // Transform a few posts to quotes for demonstration
         const testQuotes = transformPostsToQuotes(postsData.slice(0, 3));
         
-        // Show results
+        // Show comprehensive results
         showSyncNotification(
-            `✅ API Test Success! Fetched ${postsData.length} posts and created ${testQuotes.length} sample quotes`,
+            `✅ Complete API Test Success!\n` +
+            `GET: ${postsData.length} posts\n` +
+            `POST: Created post ID ${postResult.id}\n` +
+            `PUT: Updated post ID ${putResult.id}\n` +
+            `Quotes: ${testQuotes.length} samples created`,
             'success'
         );
         
-        // Log sample data
-        console.log('Sample quotes from JSONPlaceholder:', testQuotes);
+        // Log sample data with headers information
+        console.log('📊 API Test Results:', {
+            getResults: { count: postsData.length, sample: postsData[0] },
+            postResult: postResult,
+            putResult: putResult,
+            sampleQuotes: testQuotes,
+            headersUsed: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Authorization': 'Bearer test-token'
+            }
+        });
         
         // Optionally add one test quote to demonstrate
         if (testQuotes.length > 0 && confirm('Add a sample quote from JSONPlaceholder to your collection?')) {
             const sampleQuote = testQuotes[0];
             sampleQuote.text = `[API Test] ${sampleQuote.text}`;
+            sampleQuote.apiTestTimestamp = new Date().toISOString();
             quotes.push(sampleQuote);
             saveQuotes();
             populateCategories();
