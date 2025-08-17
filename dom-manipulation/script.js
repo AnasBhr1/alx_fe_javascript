@@ -576,9 +576,11 @@ async function performManualSync() {
     
     try {
         await syncQuotes(); // Use the main syncQuotes function
+        alert('Manual sync completed successfully!');
         showSyncNotification('Manual sync completed successfully!', 'success');
     } catch (error) {
         console.error('Manual sync failed:', error);
+        alert(`Manual sync failed: ${error.message}`);
         showSyncNotification(`Sync failed: ${error.message}`, 'error');
     } finally {
         isSyncing = false;
@@ -662,7 +664,14 @@ async function mergeServerData(serverData) {
         updateCategoryFilter();
         updateStorageStatus();
         
+        // Show alerts for new quotes added
+        alert(`${newQuotes.length} new quotes synced from server!`);
         showSyncNotification(`Added ${newQuotes.length} new quotes from server!`, 'success');
+        showDataUpdateAlert('Server Updates Applied', `Successfully added ${newQuotes.length} new quotes from the server to your collection.`);
+    } else {
+        // Show alert even when no new quotes
+        alert('Quotes synced with server! No new quotes to add.');
+        showDataUpdateAlert('Sync Complete', 'Your quotes are already up to date with the server.');
     }
     
     // Update server with our local data using POST
@@ -737,6 +746,9 @@ async function resolveConflict(strategy) {
                 // Keep local data, upload to server
                 const uploadResponse = await simulateServerCall('quotes', 'POST', quotes);
                 
+                // Show success alert
+                alert('Quotes synced with server! Local changes kept and uploaded.');
+                
                 if (uploadResponse.apiResults) {
                     showSyncNotification(
                         `✅ Kept local changes and posted ${uploadResponse.apiResults.length} quotes to JSONPlaceholder!`,
@@ -745,6 +757,8 @@ async function resolveConflict(strategy) {
                 } else {
                     showSyncNotification('✅ Kept local changes and updated server!', 'success');
                 }
+                
+                showDataUpdateAlert('Conflict Resolved', 'Local changes were kept and successfully uploaded to the server.');
                 break;
                 
             case 'server':
@@ -756,7 +770,11 @@ async function resolveConflict(strategy) {
                 updateStats();
                 updateCategoryFilter();
                 updateStorageStatus();
+                
+                // Show server data alert
+                alert('Quotes synced with server! Local data replaced with server data.');
                 showSyncNotification('Replaced local data with server data!', 'warning');
+                showDataUpdateAlert('Conflict Resolved', 'Local data was replaced with server data. All server quotes are now available locally.');
                 break;
                 
             case 'merge':
@@ -795,7 +813,11 @@ async function resolveConflict(strategy) {
                 
                 // Sync merged data with server using PUT method
                 const syncResponse = await simulateServerCall('quotes', 'PUT', quotes);
+                
+                // Show merge success alert
+                alert('Quotes synced with server! All quotes from both sources have been merged.');
                 showSyncNotification(`✅ ${syncResponse.message} - Total: ${quotes.length} quotes`, 'success');
+                showDataUpdateAlert('Conflict Resolved', `Successfully merged all quotes. Total: ${quotes.length} quotes available.`);
                 
                 populateCategories();
                 applyCurrentFilter();
@@ -811,8 +833,12 @@ async function resolveConflict(strategy) {
         updateSyncStatus();
         closeConflictModal();
         
+        // Final success alert for conflict resolution
+        alert('Conflict resolution completed successfully!');
+        
     } catch (error) {
         console.error('Error resolving conflict:', error);
+        alert(`Error resolving conflict: ${error.message}`);
         showSyncNotification(`Error resolving conflict: ${error.message}`, 'error');
     }
 }
@@ -932,7 +958,11 @@ async function syncQuotes() {
         updateSyncStatus();
         
         console.log('✅ Quote synchronization completed successfully');
+        
+        // Show success alert and notification
+        alert('Quotes synced with server!');
         showSyncUpdateNotification('Quotes synchronized successfully!', 'success');
+        showDataUpdateAlert('Sync Complete', `Successfully synchronized ${quotes.length} quotes with the server.`);
         
     } catch (error) {
         console.error('❌ Quote synchronization failed:', error);
@@ -966,9 +996,20 @@ async function checkForServerUpdates() {
         
         if (newServerQuotes.length > 0) {
             console.log(`📢 Found ${newServerQuotes.length} new quotes on server`);
+            
+            // Show alert for server updates
+            alert(`Server has ${newServerQuotes.length} new quotes available!`);
+            
             showServerUpdateNotification(
                 `${newServerQuotes.length} new quotes available on server. Click to sync!`,
                 'info',
+                () => syncQuotes()
+            );
+            
+            // Show detailed update alert
+            showDataUpdateAlert(
+                'Server Updates Available', 
+                `The server has ${newServerQuotes.length} new quotes. Would you like to sync now?`,
                 () => syncQuotes()
             );
         }
@@ -981,9 +1022,20 @@ async function checkForServerUpdates() {
         
         if (localOnlyQuotes.length > 0 && newServerQuotes.length > 0) {
             console.log('⚠️ Potential conflicts detected');
+            
+            // Show conflict alert
+            alert('Data conflicts detected! Local and server have different quotes.');
+            
             showServerUpdateNotification(
                 'Data conflicts detected! Local and server have different quotes.',
                 'warning',
+                () => syncQuotes()
+            );
+            
+            // Show detailed conflict alert
+            showDataUpdateAlert(
+                'Conflicts Detected',
+                `Conflicts found: ${localOnlyQuotes.length} local-only quotes, ${newServerQuotes.length} server-only quotes. Sync required.`,
                 () => syncQuotes()
             );
         }
@@ -1064,16 +1116,29 @@ async function handleSyncConflicts(conflicts, serverData) {
     showDetailedConflictModal(conflicts);
     updateSyncStatusIndicator('conflict');
     
-    // Show conflict notification
+    // Show conflict alert and notifications
+    alert(`Sync conflicts detected! ${conflicts.analysis.newOnServer} server changes, ${conflicts.analysis.newLocally} local changes. Please resolve.`);
+    
     showSyncUpdateNotification(
         `Sync conflicts detected! ${conflicts.analysis.newOnServer} server changes, ${conflicts.analysis.newLocally} local changes`,
         'warning'
+    );
+    
+    showDataUpdateAlert(
+        'Sync Conflicts Need Resolution',
+        `Found ${conflicts.analysis.newOnServer} new quotes on server and ${conflicts.analysis.newLocally} local-only quotes. Please choose how to resolve these conflicts.`,
+        () => showDetailedConflictModal(conflicts)
     );
 }
 
 // Perform clean sync when no conflicts
 async function performCleanSync(serverData) {
     await mergeServerData(serverData);
+    
+    // Show success alert for clean sync
+    alert('Quotes synced with server!');
+    showSyncUpdateNotification('Quotes synced with server! All data is up to date.', 'success');
+    
     console.log('Clean sync completed - no conflicts');
 }
 
@@ -1273,6 +1338,157 @@ function showSyncUpdateNotification(message, type = 'info') {
     }, 4000);
 }
 
+// Show data update alert with enhanced UI
+function showDataUpdateAlert(title, message, action = null) {
+    // Create custom alert overlay
+    const alertOverlay = document.createElement('div');
+    alertOverlay.className = 'data-update-alert-overlay';
+    alertOverlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2500;
+        animation: fadeIn 0.3s ease;
+    `;
+    
+    const alertBox = document.createElement('div');
+    alertBox.className = 'data-update-alert-box';
+    alertBox.style.cssText = `
+        background: white;
+        border-radius: 15px;
+        padding: 30px;
+        max-width: 500px;
+        margin: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        animation: slideUp 0.3s ease;
+        text-align: center;
+    `;
+    
+    const titleElement = document.createElement('h3');
+    titleElement.style.cssText = `
+        margin: 0 0 15px 0;
+        color: #333;
+        font-size: 1.3em;
+    `;
+    titleElement.textContent = title;
+    
+    const messageElement = document.createElement('p');
+    messageElement.style.cssText = `
+        margin: 0 0 25px 0;
+        color: #666;
+        line-height: 1.5;
+    `;
+    messageElement.textContent = message;
+    
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = `
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        flex-wrap: wrap;
+    `;
+    
+    if (action) {
+        const actionButton = document.createElement('button');
+        actionButton.textContent = 'Sync Now';
+        actionButton.style.cssText = `
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        `;
+        actionButton.onclick = () => {
+            action();
+            alertOverlay.remove();
+        };
+        buttonContainer.appendChild(actionButton);
+    }
+    
+    const closeButton = document.createElement('button');
+    closeButton.textContent = action ? 'Later' : 'OK';
+    closeButton.style.cssText = `
+        background: #6c757d;
+        color: white;
+        border: none;
+        padding: 12px 25px;
+        border-radius: 25px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    `;
+    closeButton.onclick = () => alertOverlay.remove();
+    buttonContainer.appendChild(closeButton);
+    
+    alertBox.appendChild(titleElement);
+    alertBox.appendChild(messageElement);
+    alertBox.appendChild(buttonContainer);
+    alertOverlay.appendChild(alertBox);
+    
+    // Add CSS animations
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideUp {
+            from { transform: translateY(50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(alertOverlay);
+    
+    // Auto-remove after 15 seconds
+    setTimeout(() => {
+        if (alertOverlay.parentNode) {
+            alertOverlay.remove();
+        }
+    }, 15000);
+}
+
+// Enhanced conflict alert with detailed information
+function showConflictAlert(conflictDetails) {
+    const title = '⚠️ Sync Conflicts Detected';
+    const message = `
+        Conflicts found during synchronization:
+        • Server has ${conflictDetails.newOnServer} new quotes
+        • You have ${conflictDetails.newLocally} local-only quotes
+        • ${conflictDetails.categoryConflicts} category conflicts
+        
+        Please resolve these conflicts to complete synchronization.
+    `;
+    
+    showDataUpdateAlert(title, message, () => {
+        const modal = document.getElementById('conflictModal');
+        if (modal) {
+            modal.style.display = 'flex';
+        }
+    });
+}
+
+// Auto-sync success alert
+function showAutoSyncAlert(quotesAdded) {
+    if (quotesAdded > 0) {
+        alert(`Auto-sync completed! ${quotesAdded} new quotes added from server.`);
+        showDataUpdateAlert(
+            'Auto-Sync Update',
+            `Automatic synchronization added ${quotesAdded} new quotes from the server.`
+        );
+    }
+}
+
 // Update sync interval
 function updateSyncInterval() {
     syncInterval = parseInt(syncIntervalSelect.value);
@@ -1312,10 +1528,14 @@ async function forceServerData() {
         lastSyncTime = new Date();
         saveSyncSettings();
         
+        // Show success alerts for force server data
+        alert('Quotes synced with server! Local data replaced with server data.');
         showSyncNotification(`Local data replaced with ${serverResponse.count} server quotes!`, 'warning');
+        showDataUpdateAlert('Force Sync Complete', `All local data has been replaced with ${serverResponse.count} quotes from the server.`);
         
     } catch (error) {
         console.error('Force sync failed:', error);
+        alert(`Force sync failed: ${error.message}`);
         showSyncNotification(`Force sync failed: ${error.message}`, 'error');
     } finally {
         isSyncing = false;
