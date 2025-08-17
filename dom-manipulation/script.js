@@ -130,6 +130,69 @@ async function simulateServerCall(endpoint, method = 'GET', data = null) {
     });
 }
 
+// Fetch quotes from server - Main server fetching function
+async function fetchQuotesFromServer() {
+    try {
+        console.log('Fetching quotes from server...');
+        
+        // Update UI to show fetching state
+        updateSyncStatusIndicator('syncing');
+        
+        // Make API call to fetch quotes
+        const response = await simulateServerCall('quotes', 'GET');
+        
+        // Validate response
+        if (!response || !response.data || !Array.isArray(response.data)) {
+            throw new Error('Invalid server response format');
+        }
+        
+        // Return the fetched data with metadata
+        const result = {
+            quotes: response.data,
+            lastModified: response.lastModified,
+            fetchTime: new Date().toISOString(),
+            count: response.data.length
+        };
+        
+        console.log(`Successfully fetched ${result.count} quotes from server`);
+        updateSyncStatusIndicator('online');
+        
+        return result;
+        
+    } catch (error) {
+        console.error('Error fetching quotes from server:', error);
+        updateSyncStatusIndicator('offline');
+        
+        // Re-throw with more context
+        throw new Error(`Failed to fetch quotes from server: ${error.message}`);
+    }
+}
+
+// Update sync status indicator
+function updateSyncStatusIndicator(status) {
+    const syncStatusElement = document.getElementById('syncStatus');
+    if (syncStatusElement) {
+        syncStatusElement.className = `stat-number sync-status ${status}`;
+        
+        switch (status) {
+            case 'syncing':
+                syncStatusElement.textContent = '●';
+                break;
+            case 'online':
+                syncStatusElement.textContent = '●';
+                break;
+            case 'offline':
+                syncStatusElement.textContent = '●';
+                break;
+            case 'conflict':
+                syncStatusElement.textContent = '⚠';
+                break;
+            default:
+                syncStatusElement.textContent = '●';
+        }
+    }
+}
+
 // Perform manual sync
 async function performManualSync() {
     if (isSyncing) return;
@@ -156,9 +219,9 @@ async function performManualSync() {
 // Main sync function
 async function syncWithServer() {
     try {
-        // Fetch server data
-        const serverResponse = await simulateServerCall('quotes');
-        const serverData = serverResponse.data;
+        // Fetch server data using the dedicated function
+        const serverResponse = await fetchQuotesFromServer();
+        const serverData = serverResponse.quotes;
         
         // Check for conflicts
         const hasConflicts = await detectConflicts(serverData);
@@ -168,7 +231,12 @@ async function syncWithServer() {
             conflictData = {
                 serverData: serverData,
                 localData: [...quotes],
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                serverMetadata: {
+                    lastModified: serverResponse.lastModified,
+                    fetchTime: serverResponse.fetchTime,
+                    count: serverResponse.count
+                }
             };
             showConflictModal();
             updateSyncStatus();
@@ -421,8 +489,9 @@ async function forceServerData() {
     updateSyncStatus();
     
     try {
-        const serverResponse = await simulateServerCall('quotes');
-        quotes = [...serverResponse.data];
+        // Use the dedicated fetchQuotesFromServer function
+        const serverResponse = await fetchQuotesFromServer();
+        quotes = [...serverResponse.quotes];
         
         saveQuotes();
         populateCategories();
@@ -434,7 +503,7 @@ async function forceServerData() {
         lastSyncTime = new Date();
         saveSyncSettings();
         
-        showSyncNotification('Local data replaced with server data!', 'warning');
+        showSyncNotification(`Local data replaced with ${serverResponse.count} server quotes!`, 'warning');
         
     } catch (error) {
         console.error('Force sync failed:', error);
