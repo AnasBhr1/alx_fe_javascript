@@ -4,7 +4,17 @@ currentFilter = 'all';
 
 // ===== SERVER SYNCHRONIZATION SYSTEM =====
 
-// Initialize server data (simulation)
+// Mock API Configuration
+const MOCK_API = {
+    BASE_URL: 'https://jsonplaceholder.typicode.com',
+    ENDPOINTS: {
+        POSTS: '/posts',
+        USERS: '/users',
+        COMMENTS: '/comments'
+    }
+};
+
+// Initialize server data (simulation + real API)
 function initializeServerData() {
     // Simulate server having some additional quotes
     serverQuotes = [
@@ -15,6 +25,213 @@ function initializeServerData() {
         { text: "Push yourself, because no one else is going to do it for you.", category: "Self-Improvement" },
         { text: "Great things never come from comfort zones.", category: "Growth" }
     ];
+}
+
+// Fetch data from JSONPlaceholder API
+async function fetchFromJsonPlaceholder(endpoint) {
+    try {
+        console.log(`Fetching data from JSONPlaceholder: ${endpoint}`);
+        
+        const response = await fetch(`${MOCK_API.BASE_URL}${endpoint}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log(`Successfully fetched ${data.length} items from JSONPlaceholder`);
+        
+        return data;
+        
+    } catch (error) {
+        console.error('Error fetching from JSONPlaceholder:', error);
+        throw new Error(`JSONPlaceholder API error: ${error.message}`);
+    }
+}
+
+// Transform JSONPlaceholder posts into quote format
+function transformPostsToQuotes(posts) {
+    return posts.slice(0, 10).map((post, index) => {
+        // Create meaningful quotes from post titles and bodies
+        const categories = ['Inspiration', 'Wisdom', 'Motivation', 'Life', 'Success'];
+        const category = categories[index % categories.length];
+        
+        // Use post title as quote text (clean it up)
+        let quoteText = post.title
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+            
+        // Make it more quote-like
+        if (!quoteText.endsWith('.') && !quoteText.endsWith('!') && !quoteText.endsWith('?')) {
+            quoteText += '.';
+        }
+        
+        return {
+            text: quoteText,
+            category: category,
+            apiSource: 'JSONPlaceholder',
+            originalId: post.id
+        };
+    });
+}
+
+// Simulate server API call with real JSONPlaceholder integration
+async function simulateServerCall(endpoint, method = 'GET', data = null) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            // Add realistic delay
+            await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1500));
+            
+            switch (endpoint) {
+                case 'quotes':
+                    if (method === 'GET') {
+                        // 50% chance to fetch from JSONPlaceholder, 50% to use local server simulation
+                        if (Math.random() < 0.5) {
+                            try {
+                                // Fetch from real JSONPlaceholder API
+                                const posts = await fetchFromJsonPlaceholder(MOCK_API.ENDPOINTS.POSTS);
+                                const apiQuotes = transformPostsToQuotes(posts);
+                                
+                                // Combine with server quotes
+                                const combinedQuotes = [...serverQuotes, ...apiQuotes];
+                                
+                                // Remove duplicates based on text
+                                const uniqueQuotes = [];
+                                const seenTexts = new Set();
+                                
+                                combinedQuotes.forEach(quote => {
+                                    const normalizedText = quote.text.toLowerCase().trim();
+                                    if (!seenTexts.has(normalizedText)) {
+                                        seenTexts.add(normalizedText);
+                                        uniqueQuotes.push(quote);
+                                    }
+                                });
+                                
+                                serverQuotes = uniqueQuotes;
+                                
+                                resolve({ 
+                                    data: [...serverQuotes], 
+                                    lastModified: new Date().toISOString(),
+                                    source: 'JSONPlaceholder + Server',
+                                    apiData: true
+                                });
+                                
+                            } catch (apiError) {
+                                console.warn('JSONPlaceholder API failed, using local simulation:', apiError);
+                                // Fallback to local simulation
+                                resolve({ 
+                                    data: [...serverQuotes], 
+                                    lastModified: new Date().toISOString(),
+                                    source: 'Local Simulation',
+                                    apiData: false
+                                });
+                            }
+                        } else {
+                            // Use local server simulation
+                            if (Math.random() < 0.3) {
+                                const newServerQuote = {
+                                    text: `Server insight ${Date.now()}`,
+                                    category: "Server Wisdom"
+                                };
+                                if (!serverQuotes.some(q => q.text === newServerQuote.text)) {
+                                    serverQuotes.push(newServerQuote);
+                                }
+                            }
+                            resolve({ 
+                                data: [...serverQuotes], 
+                                lastModified: new Date().toISOString(),
+                                source: 'Local Simulation',
+                                apiData: false
+                            });
+                        }
+                    } else if (method === 'POST') {
+                        serverQuotes = [...data];
+                        resolve({ success: true, data: serverQuotes });
+                    }
+                    break;
+                    
+                default:
+                    reject(new Error('Unknown endpoint'));
+            }
+        } catch (error) {
+            // Simulate occasional network errors
+            if (Math.random() < 0.1) {
+                reject(new Error('Network connection failed'));
+            } else {
+                reject(error);
+            }
+        }
+    });
+}
+
+// Fetch quotes from server with JSONPlaceholder integration
+async function fetchQuotesFromServer() {
+    try {
+        console.log('Fetching quotes from server (may include JSONPlaceholder data)...');
+        
+        // Update UI to show fetching state
+        updateSyncStatusIndicator('syncing');
+        
+        // Make API call to fetch quotes (includes JSONPlaceholder integration)
+        const response = await simulateServerCall('quotes', 'GET');
+        
+        // Validate response
+        if (!response || !response.data || !Array.isArray(response.data)) {
+            throw new Error('Invalid server response format');
+        }
+        
+        // Return the fetched data with metadata
+        const result = {
+            quotes: response.data,
+            lastModified: response.lastModified,
+            fetchTime: new Date().toISOString(),
+            count: response.data.length,
+            source: response.source || 'Unknown',
+            includesApiData: response.apiData || false
+        };
+        
+        console.log(`Successfully fetched ${result.count} quotes from ${result.source}`);
+        updateSyncStatusIndicator('online');
+        
+        // Show notification about data source
+        if (result.includesApiData) {
+            showSyncNotification(`Fetched ${result.count} quotes including live data from JSONPlaceholder API!`, 'success');
+        }
+        
+        return result;
+        
+    } catch (error) {
+        console.error('Error fetching quotes from server:', error);
+        updateSyncStatusIndicator('offline');
+        
+        // Re-throw with more context
+        throw new Error(`Failed to fetch quotes from server: ${error.message}`);
+    }
+}
+
+// Demonstration function to show JSONPlaceholder posts integration
+async function demonstrateJsonPlaceholderIntegration() {
+    try {
+        console.log('Demonstrating JSONPlaceholder integration...');
+        
+        // Fetch posts from JSONPlaceholder
+        const posts = await fetch('https://jsonplaceholder.typicode.com/posts');
+        const postsData = await posts.json();
+        
+        console.log(`Fetched ${postsData.length} posts from JSONPlaceholder`);
+        
+        // Transform some posts into quotes for demonstration
+        const demoQuotes = transformPostsToQuotes(postsData.slice(0, 5));
+        
+        console.log('Sample quotes created from JSONPlaceholder posts:', demoQuotes);
+        
+        return demoQuotes;
+        
+    } catch (error) {
+        console.error('JSONPlaceholder demonstration failed:', error);
+        return [];
+    }
 }
 
 // Load sync settings from storage
@@ -542,6 +759,64 @@ function showSyncNotification(message, type = 'success') {
             }
         }, 300);
     }, 4000);
+}
+
+// Test JSONPlaceholder API integration
+async function testJsonPlaceholderAPI() {
+    const testBtn = document.getElementById('testApiBtn');
+    const originalText = testBtn.textContent;
+    
+    testBtn.disabled = true;
+    testBtn.textContent = '🧪 Testing API...';
+    
+    try {
+        console.log('Testing JSONPlaceholder API integration...');
+        showSyncNotification('Testing JSONPlaceholder API connection...', 'info');
+        
+        // Fetch posts from JSONPlaceholder
+        const posts = await fetch('https://jsonplaceholder.typicode.com/posts');
+        
+        if (!posts.ok) {
+            throw new Error(`HTTP ${posts.status}: ${posts.statusText}`);
+        }
+        
+        const postsData = await posts.json();
+        console.log(`✅ Successfully fetched ${postsData.length} posts from JSONPlaceholder`);
+        
+        // Transform a few posts to quotes for demonstration
+        const testQuotes = transformPostsToQuotes(postsData.slice(0, 3));
+        
+        // Show results
+        showSyncNotification(
+            `✅ API Test Success! Fetched ${postsData.length} posts and created ${testQuotes.length} sample quotes`,
+            'success'
+        );
+        
+        // Log sample data
+        console.log('Sample quotes from JSONPlaceholder:', testQuotes);
+        
+        // Optionally add one test quote to demonstrate
+        if (testQuotes.length > 0 && confirm('Add a sample quote from JSONPlaceholder to your collection?')) {
+            const sampleQuote = testQuotes[0];
+            sampleQuote.text = `[API Test] ${sampleQuote.text}`;
+            quotes.push(sampleQuote);
+            saveQuotes();
+            populateCategories();
+            applyCurrentFilter();
+            updateStats();
+            updateCategoryFilter();
+            updateStorageStatus();
+            
+            showSyncNotification('Sample quote from JSONPlaceholder added to your collection!', 'success');
+        }
+        
+    } catch (error) {
+        console.error('❌ JSONPlaceholder API test failed:', error);
+        showSyncNotification(`❌ API Test Failed: ${error.message}`, 'error');
+    } finally {
+        testBtn.disabled = false;
+        testBtn.textContent = originalText;
+    }
 }// Quote data structure - using array to store quote objects
 let quotes = [];
 
@@ -624,6 +899,9 @@ function initializeApp() {
     // Initialize server data simulation
     initializeServerData();
     
+    // Demonstrate JSONPlaceholder integration on startup
+    demonstrateJsonPlaceholderIntegration();
+    
     // Initialize filtering system
     populateCategories();
     applyCurrentFilter();
@@ -645,6 +923,12 @@ function initializeApp() {
     toggleAutoSyncBtn.addEventListener('click', toggleAutoSync);
     forceServerBtn.addEventListener('click', forceServerData);
     syncIntervalSelect.addEventListener('change', updateSyncInterval);
+    
+    // Add test API button listener
+    const testApiBtn = document.getElementById('testApiBtn');
+    if (testApiBtn) {
+        testApiBtn.addEventListener('click', testJsonPlaceholderAPI);
+    }
     
     // Form input event listeners for validation
     document.getElementById('newQuoteText').addEventListener('input', validateForm);
