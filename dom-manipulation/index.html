@@ -279,6 +279,168 @@
             color: #667eea;
         }
 
+        .filter-system {
+            background: #f8f9fa;
+            border: 2px solid #667eea;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 30px 0;
+        }
+
+        .filter-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .filter-header h3 {
+            margin: 0;
+            color: #333;
+            font-size: 1.3em;
+        }
+
+        .filter-stats {
+            background: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            color: #666;
+            border: 1px solid #dee2e6;
+        }
+
+        .filter-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .dropdown-filter {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .dropdown-filter label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0;
+        }
+
+        #categoryFilter {
+            min-width: 200px;
+            padding: 10px 15px;
+            border: 2px solid #ddd;
+            border-radius: 25px;
+            font-size: 1em;
+            outline: none;
+            background: white;
+            transition: all 0.3s ease;
+        }
+
+        #categoryFilter:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .button-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .category-btn {
+            background: white;
+            border: 2px solid #667eea;
+            color: #667eea;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .category-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .category-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .category-btn .count {
+            background: rgba(255, 255, 255, 0.2);
+            color: inherit;
+            font-size: 0.8em;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 8px;
+        }
+
+        .category-btn:hover .count,
+        .category-btn.active .count {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .active-filter {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 10px;
+            padding: 12px 15px;
+            margin-top: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .clear-filter-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 0.8em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .clear-filter-btn:hover {
+            background: #c82333;
+            transform: scale(1.05);
+        }
+
+        .filtered-results {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+            color: #856404;
+        }
+
+        .no-results {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
         @media (max-width: 600px) {
             .container {
                 padding: 20px;
@@ -321,12 +483,33 @@
             </div>
         </div>
 
-        <!-- Category Filter -->
-        <div class="category-filter">
-            <label for="categorySelect">Filter by Category:</label>
-            <select id="categorySelect">
-                <option value="">All Categories</option>
-            </select>
+        <!-- Enhanced Category Filter System -->
+        <div class="filter-system">
+            <div class="filter-header">
+                <h3>📂 Filter Quotes by Category</h3>
+                <div class="filter-stats" id="filterStats">
+                    Showing <span id="visibleQuotes">0</span> of <span id="totalFilterQuotes">0</span> quotes
+                </div>
+            </div>
+            
+            <div class="filter-controls">
+                <div class="dropdown-filter">
+                    <label for="categoryFilter">Select Category:</label>
+                    <select id="categoryFilter" onchange="filterQuotes()">
+                        <option value="all">All Categories</option>
+                        <!-- Dynamically populated categories -->
+                    </select>
+                </div>
+                
+                <div class="button-filters" id="categoryButtons">
+                    <!-- Dynamically populated category buttons -->
+                </div>
+            </div>
+            
+            <div class="active-filter" id="activeFilter" style="display: none;">
+                <span>Active Filter: <strong id="activeFilterName">All</strong></span>
+                <button class="clear-filter-btn" onclick="clearFilter()">✕ Clear</button>
+            </div>
         </div>
 
         <!-- Quote Display Area -->
